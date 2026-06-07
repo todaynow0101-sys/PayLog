@@ -358,11 +358,11 @@
       </div>
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase;">4대보험 공제</div>
       <div class="toggle-row">
-        <div><div class="toggle-label">국민연금</div><div class="toggle-sub">근로자 부담 4.5%</div></div>
+        <div><div class="toggle-label">국민연금</div><div class="toggle-sub">근로자 부담 4.75%</div></div>
         <label class="toggle-switch"><input type="checkbox" id="ins-pension" checked><span class="toggle-slider"></span></label>
       </div>
       <div class="toggle-row">
-        <div><div class="toggle-label">건강보험 + 장기요양</div><div class="toggle-sub">건강보험 3.545% + 장기요양 건강보험료×12.95%</div></div>
+        <div><div class="toggle-label">건강보험 + 장기요양</div><div class="toggle-sub">건강보험 3.595% + 장기요양 건강보험료×13.14%</div></div>
         <label class="toggle-switch"><input type="checkbox" id="ins-health" checked><span class="toggle-slider"></span></label>
       </div>
       <div class="toggle-row">
@@ -659,17 +659,17 @@ function calcMonthPay(emp, data, year, month) {
     const gross=emp.monthly_salary||0;
     // 4대보험 계산 (근로자 부담)
     let ins=0;
-    if(emp.ins_pension) ins+=Math.round(gross*0.045);          // 국민연금 4.5%
+    if(emp.ins_pension) ins+=Math.round(gross*0.0475);         // 국민연금 4.75%
     if(emp.ins_health) {
-      const health=Math.round(gross*0.03545);                   // 건강보험 3.545%
-      const ltc=Math.round(health*0.1295);                      // 장기요양 건강보험료×12.95%
+      const health=Math.round(gross*0.03595);                   // 건강보험 3.595%
+      const ltc=Math.round(health*0.1314);                      // 장기요양 건강보험료×13.14%
       ins+=health+ltc;
     }
     if(emp.ins_employment) ins+=Math.round(gross*0.009);        // 고용보험 0.9%
     return { gross, withholding:ins, net:gross-ins, insDetail:{
-      pension: emp.ins_pension?Math.round(gross*0.045):0,
-      health: emp.ins_health?Math.round(gross*0.03545):0,
-      ltc: emp.ins_health?Math.round(Math.round(gross*0.03545)*0.1295):0,
+      pension: emp.ins_pension?Math.round(gross*0.0475):0,
+      health: emp.ins_health?Math.round(gross*0.03595):0,
+      ltc: emp.ins_health?Math.round(Math.round(gross*0.03595)*0.1314):0,
       employment: emp.ins_employment?Math.round(gross*0.009):0,
     }};
   }
@@ -769,7 +769,6 @@ async function updateHour(empId,dayOfMonth,val,inputEl) {
   if(window.innerWidth<=768) renderMobile(year,month);
   else renderCalendar(year,month);
 }
-
 function handleArrow(e,input) {
   const day=parseInt(input.dataset.day), empId=input.dataset.empid;
   const {year,month}=getYM('');
@@ -937,7 +936,7 @@ async function syncSummary(year,month) {
         ${(emp.tax33&&showDeduction&&emp.pay_type==='hourly')?`<div class="export-pay-row"><span>원천징수 (3.3%)</span><span>- ${Math.round(pay.withholding).toLocaleString()}원</span></div>`:''}
         ${(emp.pay_type==='monthly'&&showDeduction&&pay.insDetail)?[
           emp.ins_pension?`<div class="export-pay-row"><span>국민연금 (4.5%)</span><span>- ${pay.insDetail.pension.toLocaleString()}원</span></div>`:'',
-          emp.ins_health?`<div class="export-pay-row"><span>건강보험 (3.545%)</span><span>- ${pay.insDetail.health.toLocaleString()}원</span></div>`:'',
+          emp.ins_health?`<div class="export-pay-row"><span>건강보험 (3.595%)</span><span>- ${pay.insDetail.health.toLocaleString()}원</span></div>`:'',
           emp.ins_health?`<div class="export-pay-row"><span>장기요양보험</span><span>- ${pay.insDetail.ltc.toLocaleString()}원</span></div>`:'',
           emp.ins_employment?`<div class="export-pay-row"><span>고용보험 (0.9%)</span><span>- ${pay.insDetail.employment.toLocaleString()}원</span></div>`:'',
         ].join(''):''}
