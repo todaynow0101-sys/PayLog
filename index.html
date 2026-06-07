@@ -356,8 +356,21 @@
         <div><div class="toggle-label">주휴수당 포함 금액</div><div class="toggle-sub">월급에 주휴수당이 이미 포함된 경우</div></div>
         <label class="toggle-switch"><input type="checkbox" id="juhyu-included"><span class="toggle-slider"></span></label>
       </div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:0.5px;text-transform:uppercase;">4대보험 공제</div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">국민연금</div><div class="toggle-sub">근로자 부담 4.5%</div></div>
+        <label class="toggle-switch"><input type="checkbox" id="ins-pension" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">건강보험 + 장기요양</div><div class="toggle-sub">건강보험 3.545% + 장기요양 건강보험료×12.95%</div></div>
+        <label class="toggle-switch"><input type="checkbox" id="ins-health" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">고용보험</div><div class="toggle-sub">근로자 부담 0.9%</div></div>
+        <label class="toggle-switch"><input type="checkbox" id="ins-employment" checked><span class="toggle-slider"></span></label>
+      </div>
     </div>
-    <!-- 3.3% 원천징수 토글 (공통) -->
+    <!-- 3.3% 원천징수 (시급제만) -->
     <div class="toggle-row" id="tax33-row">
       <div><div class="toggle-label">3.3% 원천징수 적용</div><div class="toggle-sub">소득세 3% + 지방소득세 0.3%</div></div>
       <label class="toggle-switch"><input type="checkbox" id="tax33" checked><span class="toggle-slider"></span></label>
@@ -502,6 +515,7 @@ function setPayType(type) {
   document.getElementById('btn-monthly').classList.toggle('active',type==='monthly');
   document.getElementById('hourly-fields').style.display=type==='hourly'?'block':'none';
   document.getElementById('monthly-fields').style.display=type==='monthly'?'block':'none';
+  document.getElementById('tax33-row').style.display=type==='hourly'?'flex':'none';
 }
 
 function openEmpModal(id) {
@@ -519,6 +533,9 @@ function openEmpModal(id) {
     document.getElementById('juhyu-auto').checked=e.juhyu_auto!==false;
     document.getElementById('juhyu-included').checked=!!e.juhyu_included;
     document.getElementById('tax33').checked=!!e.tax33;
+    document.getElementById('ins-pension').checked=e.ins_pension!==false;
+    document.getElementById('ins-health').checked=e.ins_health!==false;
+    document.getElementById('ins-employment').checked=e.ins_employment!==false;
     setPayType(e.pay_type||'hourly');
   } else {
     document.getElementById('emp-name').value='';
@@ -529,6 +546,9 @@ function openEmpModal(id) {
     document.getElementById('juhyu-auto').checked=true;
     document.getElementById('juhyu-included').checked=false;
     document.getElementById('tax33').checked=true;
+    document.getElementById('ins-pension').checked=true;
+    document.getElementById('ins-health').checked=true;
+    document.getElementById('ins-employment').checked=true;
     setPayType('hourly');
   }
   document.getElementById('emp-modal').classList.add('open');
@@ -551,7 +571,10 @@ async function saveEmployee() {
   if(currentPayType==='hourly'&&(!wage||wage<1)) return setErr('emp-err','시급을 입력하세요');
   if(currentPayType==='monthly'&&(!salary||salary<1)) return setErr('emp-err','월급을 입력하세요');
   const btn=document.getElementById('save-emp-btn'); btn.disabled=true;
-  const payload={name,resident_front:rnF||null,resident_number:rnB||null,pay_type:currentPayType,hourly_wage:currentPayType==='hourly'?wage:null,monthly_salary:currentPayType==='monthly'?salary:null,juhyu_auto:currentPayType==='hourly'?juhyuAuto:false,juhyu_included:currentPayType==='monthly'?juhyuIncluded:false,tax33,user_id:currentUser.id};
+  const insPension=document.getElementById('ins-pension').checked;
+  const insHealth=document.getElementById('ins-health').checked;
+  const insEmployment=document.getElementById('ins-employment').checked;
+  const payload={name,resident_front:rnF||null,resident_number:rnB||null,pay_type:currentPayType,hourly_wage:currentPayType==='hourly'?wage:null,monthly_salary:currentPayType==='monthly'?salary:null,juhyu_auto:currentPayType==='hourly'?juhyuAuto:false,juhyu_included:currentPayType==='monthly'?juhyuIncluded:false,tax33:currentPayType==='hourly'?tax33:false,ins_pension:currentPayType==='monthly'?insPension:false,ins_health:currentPayType==='monthly'?insHealth:false,ins_employment:currentPayType==='monthly'?insEmployment:false,user_id:currentUser.id};
   let error;
   if(editingEmpId){({error}=await sb.from('employees').update(payload).eq('id',editingEmpId));}
   else{({error}=await sb.from('employees').insert(payload));}
@@ -634,7 +657,21 @@ function getDow(y,m,d){ return new Date(y,m-1,d).getDay(); }
 function calcMonthPay(emp, data, year, month) {
   if(emp.pay_type==='monthly') {
     const gross=emp.monthly_salary||0;
-    return emp.tax33 ? calc33(gross) : { gross, withholding:0, net:gross };
+    // 4대보험 계산 (근로자 부담)
+    let ins=0;
+    if(emp.ins_pension) ins+=Math.round(gross*0.045);          // 국민연금 4.5%
+    if(emp.ins_health) {
+      const health=Math.round(gross*0.03545);                   // 건강보험 3.545%
+      const ltc=Math.round(health*0.1295);                      // 장기요양 건강보험료×12.95%
+      ins+=health+ltc;
+    }
+    if(emp.ins_employment) ins+=Math.round(gross*0.009);        // 고용보험 0.9%
+    return { gross, withholding:ins, net:gross-ins, insDetail:{
+      pension: emp.ins_pension?Math.round(gross*0.045):0,
+      health: emp.ins_health?Math.round(gross*0.03545):0,
+      ltc: emp.ins_health?Math.round(Math.round(gross*0.03545)*0.1295):0,
+      employment: emp.ins_employment?Math.round(gross*0.009):0,
+    }};
   }
   const totalDays=getDaysInMonth(year,month);
   const firstDow=new Date(year,month-1,1).getDay();
@@ -874,7 +911,12 @@ async function syncSummary(year,month) {
             <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${emp.name} <span class="badge ${isM?'badge-monthly':'badge-hourly'}">${isM?'월급제':'시급제'}</span></div>
             <div style="font-size:12px;color:var(--text3);font-family:monospace;margin-bottom:6px;">${rnFull}</div>
             <div class="deduct-line"><span>세전</span><span>${Math.round(pay.gross).toLocaleString()}원</span></div>
-            ${(emp.tax33&&showDeduction)?`<div class="deduct-line"><span>원천징수(3.3%)</span><span>-${Math.round(pay.withholding).toLocaleString()}원</span></div>`:''}
+            ${(emp.tax33&&showDeduction&&emp.pay_type==='hourly')?`<div class="deduct-line"><span>원천징수(3.3%)</span><span>-${Math.round(pay.withholding).toLocaleString()}원</span></div>`:''}
+            ${(emp.pay_type==='monthly'&&showDeduction&&pay.insDetail)?[
+              emp.ins_pension?`<div class="deduct-line"><span>국민연금</span><span>-${pay.insDetail.pension.toLocaleString()}원</span></div>`:'',
+              emp.ins_health?`<div class="deduct-line"><span>건강보험+장기요양</span><span>-${(pay.insDetail.health+pay.insDetail.ltc).toLocaleString()}원</span></div>`:'',
+              emp.ins_employment?`<div class="deduct-line"><span>고용보험</span><span>-${pay.insDetail.employment.toLocaleString()}원</span></div>`:'',
+            ].join(''):''}
             ${showNet?`<div class="net-line"><span>실수령액</span><span>${Math.round(pay.net).toLocaleString()}원</span></div>`:''}
           </div>
         </div>`;
@@ -892,7 +934,13 @@ async function syncSummary(year,month) {
         <div class="export-emp-name">${emp.name}</div>
         <div class="export-emp-rn">${rnFull}</div>
         <div class="export-pay-row"><span>세전 급여</span><span>${Math.round(pay.gross).toLocaleString()}원</span></div>
-        ${(emp.tax33&&showDeduction)?`<div class="export-pay-row"><span>원천징수 (3.3%)</span><span>- ${Math.round(pay.withholding).toLocaleString()}원</span></div>`:''}
+        ${(emp.tax33&&showDeduction&&emp.pay_type==='hourly')?`<div class="export-pay-row"><span>원천징수 (3.3%)</span><span>- ${Math.round(pay.withholding).toLocaleString()}원</span></div>`:''}
+        ${(emp.pay_type==='monthly'&&showDeduction&&pay.insDetail)?[
+          emp.ins_pension?`<div class="export-pay-row"><span>국민연금 (4.5%)</span><span>- ${pay.insDetail.pension.toLocaleString()}원</span></div>`:'',
+          emp.ins_health?`<div class="export-pay-row"><span>건강보험 (3.545%)</span><span>- ${pay.insDetail.health.toLocaleString()}원</span></div>`:'',
+          emp.ins_health?`<div class="export-pay-row"><span>장기요양보험</span><span>- ${pay.insDetail.ltc.toLocaleString()}원</span></div>`:'',
+          emp.ins_employment?`<div class="export-pay-row"><span>고용보험 (0.9%)</span><span>- ${pay.insDetail.employment.toLocaleString()}원</span></div>`:'',
+        ].join(''):''}
         ${showNet?`<div class="export-pay-row net"><span>실수령액</span><span>${Math.round(pay.net).toLocaleString()}원</span></div>`:''}
       </div>`;
     }).join('')}
