@@ -567,22 +567,55 @@ async function loadSchedule() {
   renderCalendar(year,month); renderMobile(year,month);
 }
 
-// 지난달 복사
+// 지난달 복사 (요일 패턴 기준)
 async function copyPrevMonth() {
   const {year,month}=getYM('');
   const prevY=month===1?year-1:year, prevM=month===1?12:month-1;
   if(!employees.length){ toast('직원을 먼저 추가해주세요'); return; }
-  if(!confirm(`${prevY}년 ${prevM}월 스케줄을 ${year}년 ${month}월로 복사할까요?\n(현재 데이터는 덮어씌워집니다)`)) return;
+  if(!confirm(`${prevY}년 ${prevM}월의 요일 패턴을 ${year}년 ${month}월에 복사할까요?\n(월요일→월요일, 화요일→화요일... 현재 데이터는 덮어씌워집니다)`)) return;
   toast('복사 중...');
   const empIds=employees.map(e=>e.id);
   const {data:prevData}=await sb.from('schedules').select('*').in('employee_id',empIds).eq('year',prevY).eq('month',prevM);
   if(!prevData||!prevData.length){ toast('지난달 데이터가 없어요'); return; }
-  const curDays=new Date(year,month,0).getDate();
-  const rows=prevData.filter(r=>r.day_of_month<=curDays).map(r=>({ employee_id:r.employee_id, year, month, day_of_month:r.day_of_month, hours:r.hours }));
-  if(!rows.length){ toast('복사할 데이터가 없어요'); return; }
+
+  // 직원별 요일별 시간 패턴 추출 (같은 요일 여러번이면 평균)
+  // 구조: { empId: { 0:시간, 1:시간, ..., 6:시간 } }  0=일, 1=월, ...
+  const dowPattern = {}; // empId -> { dow -> [hours] }
+  prevData.forEach(r => {
+    const dow = new Date(prevY, prevM-1, r.day_of_month).getDay();
+    if(!dowPattern[r.employee_id]) dowPattern[r.employee_id]={};
+    if(!dowPattern[r.employee_id][dow]) dowPattern[r.employee_id][dow]=[];
+    if(r.hours>0) dowPattern[r.employee_id][dow].push(r.hours);
+  });
+
+  // 요일별 대표값: 가장 많이 쓴 값 (최빈값), 없으면 0
+  const dowHours = {}; // empId -> { dow -> hours }
+  Object.entries(dowPattern).forEach(([empId, dowMap]) => {
+    dowHours[empId]={};
+    Object.entries(dowMap).forEach(([dow, arr]) => {
+      if(!arr.length){ dowHours[empId][dow]=0; return; }
+      // 최빈값
+      const freq={};
+      arr.forEach(h=>{ freq[h]=(freq[h]||0)+1; });
+      dowHours[empId][dow]=parseFloat(Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0]);
+    });
+  });
+
+  // 이번달 날짜에 요일 패턴 적용
+  const curDays=getDaysInMonth(year,month);
+  const rows=[];
+  for(let d=1;d<=curDays;d++){
+    const dow=new Date(year,month-1,d).getDay();
+    empIds.forEach(empId=>{
+      const h=dowHours[empId]?.[dow];
+      if(h && h>0) rows.push({ employee_id:empId, year, month, day_of_month:d, hours:h });
+    });
+  }
+
+  if(!rows.length){ toast('복사할 패턴이 없어요'); return; }
   await sb.from('schedules').delete().in('employee_id',empIds).eq('year',year).eq('month',month);
   await sb.from('schedules').insert(rows);
-  toast('복사됐어요!'); loadSchedule();
+  toast('요일 패턴으로 복사됐어요!'); loadSchedule();
 }
 
 function getDaysInMonth(y,m){ return new Date(y,m,0).getDate(); }
