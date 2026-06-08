@@ -530,23 +530,25 @@ function renderEmployeeList() {
   const el=document.getElementById('emp-list');
   document.getElementById('emp-count').textContent=`총 ${employees.length}명`;
   if(!employees.length){ el.innerHTML=`<div class="empty"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><div class="empty-text">등록된 직원이 없어요</div></div>`; return; }
-  el.innerHTML=`<table class="data-table">
-    <thead><tr><th>이름</th><th>유형</th><th>주민번호</th><th>시급/월급</th><th>3.3%</th><th></th></tr></thead>
-    <tbody>${employees.map(emp=>{
-      const isM=emp.pay_type==='monthly';
-      const rnF=emp.resident_front||'', rnB=emp.resident_number?emp.resident_number[0]+'●●●●●●':'';
-      const rnD=(rnF||rnB)?`${rnF} — ${rnB}`:'미입력';
-      const payD=isM?`${Number(emp.monthly_salary||0).toLocaleString()}원/월`:`${Number(emp.hourly_wage||0).toLocaleString()}원/h`;
-      return `<tr>
-        <td><strong>${emp.name}</strong></td>
-        <td><span class="badge ${isM?'badge-monthly':'badge-hourly'}">${isM?'월급제':'시급제'}</span>${emp.tax33?'<span class="badge badge-33" style="margin-left:4px;">3.3%</span>':''}</td>
-        <td style="font-size:12px;font-family:monospace;">${rnD}</td>
-        <td style="font-family:monospace;">${payD}</td>
-        <td style="font-size:12px;color:var(--text3);">${emp.tax33?'적용':'미적용'}</td>
-        <td><button class="btn btn-ghost" onclick="openEmpModal('${emp.id}')" style="font-size:12px;padding:5px 10px;">수정</button></td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  el.innerHTML=employees.map(emp=>{
+    const isM=emp.pay_type==='monthly';
+    const rnF=emp.resident_front||'', rnB=emp.resident_number?emp.resident_number[0]+'●●●●●●':'';
+    const rnD=(rnF||rnB)?`${rnF} — ${rnB}`:'주민번호 미입력';
+    const payD=isM?`${Number(emp.monthly_salary||0).toLocaleString()}원/월`:`${Number(emp.hourly_wage||0).toLocaleString()}원/h`;
+    const deductTag=isM?'4대보험':(emp.tax33?'3.3%':'');
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
+          <strong style="font-size:14px;">${emp.name}</strong>
+          <span class="badge ${isM?'badge-monthly':'badge-hourly'}">${isM?'월급제':'시급제'}</span>
+          ${deductTag?`<span class="badge badge-33">${deductTag}</span>`:''}
+        </div>
+        <div style="font-size:12px;color:var(--text3);font-family:monospace;margin-bottom:3px;">${rnD}</div>
+        <div style="font-size:13px;font-family:monospace;font-weight:600;">${payD}</div>
+      </div>
+      <button class="btn btn-ghost" onclick="openEmpModal('${emp.id}')" style="font-size:12px;padding:7px 14px;flex-shrink:0;">수정</button>
+    </div>`;
+  }).join('');
 }
 
 function setPayType(type) {
@@ -705,8 +707,8 @@ function calcMonthPay(emp, data, year, month) {
     let ins=0;
     if(emp.ins_pension) ins+=Math.floor(gross*0.0475);         // 국민연금 4.75%
     if(emp.ins_health) {
-      const health=Math.floor(gross*0.03595);                   // 건강보험 3.595%
-      const ltc=Math.floor(health*0.1314);                      // 장기요양 건강보험료×13.14%
+      const health=Math.floor(gross*0.03595/10)*10;             // 건강보험 3.595% (10원 단위 절사)
+      const ltc=Math.floor(health*0.1314/10)*10;                // 장기요양 건강보험료×13.14% (10원 단위 절사)
       ins+=health+ltc;
     }
     if(emp.ins_employment) ins+=Math.floor(gross*0.009);        // 고용보험 0.9%
@@ -716,8 +718,8 @@ function calcMonthPay(emp, data, year, month) {
     ins += incomeTax + localTax;
     return { gross, withholding:ins, net:gross-ins, insDetail:{
       pension: emp.ins_pension?Math.floor(gross*0.0475):0,
-      health: emp.ins_health?Math.floor(gross*0.03595):0,
-      ltc: emp.ins_health?Math.floor(Math.floor(gross*0.03595)*0.1314):0,
+      health: emp.ins_health?Math.floor(gross*0.03595/10)*10:0,
+      ltc: emp.ins_health?Math.floor(Math.floor(gross*0.03595/10)*10*0.1314/10)*10:0,
       employment: emp.ins_employment?Math.floor(gross*0.009):0,
       incomeTax, localTax,
     }};
